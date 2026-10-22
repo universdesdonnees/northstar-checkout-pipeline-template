@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Northstar Tickets demo checkout used in the delivery pipeline lab."
+    />
+    <title>Checkout | Northstar Tickets</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+  </head>
+  <body
+    data-ticket-price="{{ ticket_price }}"
+    data-service-fee="{{ service_fee }}"
+  >
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Northstar Tickets home">
+        <svg viewBox="0 0 36 36" role="img" aria-hidden="true">
+          <path d="M18 1.5 22 14l12.5 4L22 22l-4 12.5L14 22 1.5 18 14 14 18 1.5Z" />
+          <circle cx="18" cy="18" r="3.2" />
+        </svg>
+        <span>Northstar</span>
+        <small>tickets</small>
+      </a>
+      <div class="secure-pill">
+        <span class="status-dot"></span>
+        Demo checkout
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="event-panel" aria-labelledby="event-title">
+        <div class="event-art" aria-hidden="true">
+          <div class="orbit orbit-one"></div>
+          <div class="orbit orbit-two"></div>
+          <div class="planet"></div>
+          <p>LIVE / 26</p>
+        </div>
+
+        <div class="event-copy">
+          <p class="eyebrow">Northstar presents</p>
+          <h1 id="event-title">Cosmic Frequencies</h1>
+          <p class="event-subtitle">An immersive night of sound, light and movement.</p>
+
+          <dl class="event-details">
+            <div>
+              <dt>Date</dt>
+              <dd>Saturday, 14 November</dd>
+            </div>
+            <div>
+              <dt>Time</dt>
+              <dd>Doors open 19:30</dd>
+            </div>
+            <div>
+              <dt>Venue</dt>
+              <dd>Horizon Hall · Lyon</dd>
+            </div>
+          </dl>
+        </div>
+
+        <aside class="runtime-card" aria-label="Container metadata">
+          <div>
+            <span>Image version</span>
+            <strong>{{ runtime.version }}</strong>
+          </div>
+          <div>
+            <span>Environment</span>
+            <strong>{{ runtime.environment }}</strong>
+          </div>
+          <div>
+            <span>Container host</span>
+            <code>{{ runtime.host }}</code>
+          </div>
+        </aside>
+      </section>
+
+      <section class="checkout-panel" aria-labelledby="checkout-title">
+        <div class="step-label"><span>01</span> Your tickets</div>
+        <h2 id="checkout-title">Complete Your Order</h2>
+        <p class="helper">This is a training app. It never asks for payment details.</p>
+
+        <div class="ticket-row">
+          <div>
+            <strong>General admission</strong>
+            <span>Standing · Instant mobile ticket</span>
+          </div>
+          <div class="quantity-picker" aria-label="Ticket quantity">
+            <button id="decrease" type="button" aria-label="Remove one ticket">−</button>
+            <output id="quantity" aria-live="polite">2</output>
+            <button id="increase" type="button" aria-label="Add one ticket">+</button>
+          </div>
+        </div>
+
+        <form id="checkout-form">
+          <label for="email">Delivery email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            placeholder="you@example.com"
+            autocomplete="email"
+            required
+          />
+
+          <div class="price-lines" aria-live="polite">
+            <div><span id="ticket-line">2 tickets × €48.00</span><strong id="ticket-total">€96.00</strong></div>
+            <div><span>Service fee</span><strong id="fee-total">€7.00</strong></div>
+            <div class="grand-total"><span>Total</span><strong id="grand-total">€103.00</strong></div>
+          </div>
+
+          <button class="checkout-button" type="submit">
+            <span>Place demo order</span>
+            <span aria-hidden="true">→</span>
+          </button>
+          <p class="form-status" id="form-status" role="status"></p>
+        </form>
+      </section>
+    </main>
+
+    <footer>
+      <span>northstar-checkout</span>
+      <span>Healthy and ready</span>
+    </footer>
+  </body>
+</html>

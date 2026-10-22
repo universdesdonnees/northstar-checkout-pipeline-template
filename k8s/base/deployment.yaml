@@ -1,0 +1,52 @@
+# The Deployment of Day 5, without a namespace and without a real image.
+# Each environment folder adds its namespace, its number of copies and its
+# configuration. The pipeline adds the image before each deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  labels:
+    app: checkout
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: checkout
+      track: stable
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1          # at most one extra Pod during an update
+      maxUnavailable: 0    # never fewer ready Pods than wanted
+  template:
+    metadata:
+      labels:
+        app: checkout
+        track: stable
+    spec:
+      containers:
+        - name: checkout
+          image: checkout    # replaced by the pipeline with the ECR image
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: checkout-config
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:      # receive traffic only when /health answers
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+          livenessProbe:       # restart the container if /health stops answering
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10

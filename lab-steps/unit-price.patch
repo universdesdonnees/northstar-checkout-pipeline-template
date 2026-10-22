@@ -1,0 +1,21 @@
+diff --git a/app/app.py b/app/app.py
+index 599b93d..4d7ffba 100644
+--- a/app/app.py
++++ b/app/app.py
+@@ -53,13 +53,15 @@ def create_demo_order():
+     if "@" not in email or email.startswith("@") or email.endswith("@"):
+         return jsonify(error="Enter a valid email address."), 400
+ 
+-    total_cents = quantity * (TICKET_PRICE_CENTS + SERVICE_FEE_CENTS)
++    unit_price_cents = TICKET_PRICE_CENTS
++    total_cents = quantity * unit_price_cents
+ 
+     return (
+         jsonify(
+             message="Demo order confirmed. No payment was taken.",
+             order=f"NS-{secrets.token_hex(3).upper()}",
+             quantity=quantity,
++            unit_price=f"€{unit_price_cents / 100:.2f}",
+             total=f"€{total_cents / 100:.2f}",
+         ),
+         201,

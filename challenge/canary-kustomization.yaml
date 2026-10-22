@@ -1,0 +1,21 @@
+# Challenge: a canary of the checkout in production.
+# Copy this file to k8s/canary/kustomization.yaml, then replace each
+# "YOUR CODE HERE" so that the result is:
+#   - a Deployment named checkout-canary in the namespace prod,
+#   - with one Pod,
+#   - whose Pods carry the label track: canary instead of track: stable.
+# Check your work with:  kubectl kustomize k8s/canary
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: prod
+resources:
+  - ../base
+nameSuffix: YOUR CODE HERE
+replicas:
+  - name: checkout
+    count: YOUR CODE HERE
+labels:
+  - pairs:
+      track: YOUR CODE HERE
+    includeSelectors: true    # the canary Deployment selects only canary Pods
+    includeTemplates: true    # and its Pods carry the canary label

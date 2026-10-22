@@ -1,0 +1,132 @@
+# The delivery pipeline of the Northstar checkout.
+# On a pull request: lint and unit tests only.
+# On a merge to main: tests, one image, staging, then production after an approval.
+name: Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-west-3
+  ECR_REPOSITORY: northstar/checkout
+
+jobs:
+  test:
+    name: Lint and unit tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install the dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit tests
+        run: python -m pytest -v
+
+  build:
+    name: Build, push and scan the image
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write    # lets the job ask GitHub for an OIDC token
+      contents: read
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Name the image after the commit
+        id: tag
+        run: echo "image_tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Get temporary AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push the image once
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.image_tag }}
+          IMAGE_TAG: ${{ steps.tag.outputs.image_tag }}
+        run: |
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+               --image-ids imageTag="$IMAGE_TAG" > /dev/null 2>&1; then
+            echo "The image $IMAGE_TAG is already in ECR, so it is not built again."
+            exit 0
+          fi
+          docker build --build-arg APP_VERSION="$IMAGE_TAG" -t "$IMAGE" app/
+          docker push "$IMAGE"
+
+      - name: Wait for the scan and stop on critical findings
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.image_tag }}
+        run: |
+          # ECR starts the scan a few seconds after the push. Ask for its status every 10 seconds.
+          for ATTEMPT in $(seq 1 30); do
+            STATUS=$(aws ecr describe-image-scan-findings --repository-name "$ECR_REPOSITORY" --image-id imageTag="$IMAGE_TAG" \
+              --query 'imageScanStatus.status' --output text 2> /dev/null || echo "NOT_STARTED")
+            echo "Attempt $ATTEMPT: scan status $STATUS"
+            if [ "$STATUS" = "COMPLETE" ] || [ "$STATUS" = "FAILED" ]; then
+              break
+            fi
+            sleep 10
+          done
+          if [ "$STATUS" != "COMPLETE" ]; then
+            echo "::error::The scan of $IMAGE_TAG did not complete."
+            exit 1
+          fi
+          aws ecr describe-image-scan-findings --repository-name "$ECR_REPOSITORY" --image-id imageTag="$IMAGE_TAG" \
+            --query 'imageScanFindings.findingSeverityCounts' --output json
+          CRITICAL=$(aws ecr describe-image-scan-findings --repository-name "$ECR_REPOSITORY" --image-id imageTag="$IMAGE_TAG" \
+            --query 'imageScanFindings.findingSeverityCounts.CRITICAL' --output text)
+          if [ "$CRITICAL" != "None" ] && [ "$CRITICAL" -gt 0 ]; then
+            echo "::error::The image has $CRITICAL critical vulnerabilities. It is not deployed."
+            exit 1
+          fi
+
+  deploy-staging:
+    name: Staging
+    needs: build
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      environment: staging
+      image_tag: ${{ needs.build.outputs.image_tag }}
+
+  deploy-production:
+    name: Production
+    needs: [build, deploy-staging]
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      environment: production
+      image_tag: ${{ needs.build.outputs.image_tag }}

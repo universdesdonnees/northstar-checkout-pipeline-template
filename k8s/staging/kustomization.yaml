@@ -1,0 +1,12 @@
+# The checkout in the namespace staging: 2 copies and the staging configuration.
+# The pipeline runs "kustomize edit set image" in this folder before each
+# deployment, which adds the ECR image and its tag below.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: staging
+resources:
+  - ../base
+  - configmap.yaml
+replicas:
+  - name: checkout
+    count: 2

@@ -1,0 +1,15 @@
+# The two environments of the checkout share one cluster, in two namespaces.
+# A real platform would use one cluster, often one AWS account, per environment.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    environment: staging
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod
+  labels:
+    environment: production

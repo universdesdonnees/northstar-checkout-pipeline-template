@@ -1,0 +1,39 @@
+# Amazon EKS cluster for the Northstar checkout. It is the cluster of Day 5,
+# created again from the same configuration.
+# Create it with:  eksctl create cluster -f platform/cluster.yaml
+# Delete it with:  eksctl delete cluster -f platform/cluster.yaml --disable-nodegroup-eviction --wait
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: northstar-eks
+  region: eu-west-3
+  tags:
+    project: northstar
+    lab: m03-d07
+
+# Keep managed node groups. A future eksctl version turns EKS Auto Mode on
+# by default, and Auto Mode chooses instance types that a free plan refuses.
+autoModeConfig:
+  enabled: false
+
+# eksctl creates a new VPC with public and private subnets in three
+# Availability Zones. No NAT gateway, because the nodes run in the
+# public subnets and a NAT gateway is billed by the hour.
+vpc:
+  nat:
+    gateway: Disable
+
+managedNodeGroups:
+  - name: checkout-nodes
+    # t3.small is eligible for the AWS Free Tier. t3.medium is not, and a
+    # free plan account refuses to launch it.
+    instanceType: t3.small
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 3
+    volumeSize: 20
+    labels:
+      workload: checkout
+    tags:
+      project: northstar

@@ -1,0 +1,90 @@
+# Deploys one image tag that is already in ECR to one environment.
+# The pipeline calls it for staging and for production. You can also start
+# it by hand from the Actions tab to deploy an older tag again (a rollback).
+name: Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      image_tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy to
+        type: choice
+        options: [staging, production]
+      image_tag:
+        description: Image tag to deploy, a short commit SHA that is already in ECR
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-west-3
+  CLUSTER_NAME: northstar-eks
+  ECR_REPOSITORY: northstar/checkout
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.image_tag }} to ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.smoke.outputs.url }}
+    concurrency: deploy-${{ inputs.environment }}    # one deployment at a time per environment
+    env:
+      # The GitHub environment "production" deploys to the namespace "prod".
+      NAMESPACE: ${{ inputs.environment == 'production' && 'prod' || 'staging' }}
+      IMAGE_TAG: ${{ inputs.image_tag }}
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Get temporary AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Connect kubectl to the cluster
+        run: aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Check that the image is in ECR
+        run: |
+          aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$IMAGE_TAG" \
+            --query 'imageDetails[0].[imageTags[0], imageDigest]' --output text
+
+      - name: Apply the manifests with the new image
+        id: apply
+        working-directory: k8s/${{ env.NAMESPACE }}
+        run: |
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          kustomize edit set image "checkout=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
+          kubectl apply -k .
+          kubectl -n "$NAMESPACE" annotate deployment/checkout --overwrite \
+            kubernetes.io/change-cause="image $IMAGE_TAG, run ${{ github.run_number }} of ${{ github.workflow }}"
+
+      - name: Wait for the rolling update
+        run: kubectl -n "$NAMESPACE" rollout status deployment/checkout --timeout=120s
+
+      - name: Smoke test
+        id: smoke
+        run: |
+          HOST=$(kubectl -n "$NAMESPACE" get service checkout -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "url=http://$HOST" >> "$GITHUB_OUTPUT"
+          ./scripts/smoke-test.sh "http://$HOST" "$IMAGE_TAG"
+
+      - name: Roll back after a failure
+        if: failure() && steps.apply.outcome == 'success'
+        run: |
+          echo "::warning::The deployment of $IMAGE_TAG failed. Kubernetes goes back to the previous version."
+          kubectl -n "$NAMESPACE" rollout undo deployment/checkout
+          kubectl -n "$NAMESPACE" rollout status deployment/checkout --timeout=120s

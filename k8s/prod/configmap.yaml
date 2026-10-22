@@ -1,0 +1,7 @@
+# Configuration of the production environment. The image is the same everywhere.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: checkout-config
+data:
+  NORTHSTAR_ENVIRONMENT: production

@@ -1,0 +1,41 @@
+# Challenge: paste this job into .github/workflows/pipeline.yml, between the
+# job deploy-staging and the job deploy-production, then:
+#   - replace each "YOUR CODE HERE",
+#   - make deploy-production wait for this job.
+  canary:
+    name: Canary in production
+    needs: [build, YOUR CODE HERE]
+    runs-on: ubuntu-24.04
+    environment: YOUR CODE HERE
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Get temporary AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Connect kubectl to the cluster
+        run: aws eks update-kubeconfig --name northstar-eks --region "$AWS_REGION"
+
+      - name: Start one canary Pod next to the stable Pods
+        working-directory: k8s/canary
+        run: |
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          kustomize edit set image "checkout=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG"
+          # YOUR CODE HERE: apply the canary manifests, then wait until the canary Pod is ready
+
+      - name: Measure the share of traffic that reaches the canary
+        run: ./scripts/canary-share.sh prod "$IMAGE_TAG" 40
+
+      - name: Remove the canary after a failure
+        if: failure()
+        run: |
+          # YOUR CODE HERE: delete the canary Deployment, so customers stop reaching the new version

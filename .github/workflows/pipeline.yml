@@ -1,0 +1,43 @@
+# The delivery pipeline of the Northstar checkout.
+# On a pull request: lint and unit tests only.
+# On a merge to main: the same checks. Later parts of the lab add the image and the deployments.
+name: Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-west-3
+  ECR_REPOSITORY: northstar/checkout
+
+jobs:
+  test:
+    name: Lint and unit tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install the dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Unit tests
+        run: python -m pytest -v
+
